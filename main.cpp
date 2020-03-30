@@ -68,7 +68,7 @@ void TestWithAlloc(const std::vector<float>& input_host, std::vector<float>& out
 	auto start = high_resolution_clock::now();
 	for (unsigned int i = 1; i <= mIterations; ++i) {
 		cudaError_t err = cudaSuccess;
-		uchar4* input = NULL;
+		float4* input = NULL;
 		err = cudaMalloc((void**)&input, sizeBytes);
 		if (err != cudaSuccess) {
 			fprintf(stderr, "Failed to allocate device vector A (error code %s)!\n", cudaGetErrorString(err));
@@ -81,7 +81,7 @@ void TestWithAlloc(const std::vector<float>& input_host, std::vector<float>& out
 			exit(EXIT_FAILURE);
 		}
 
-		uchar4* output = NULL;
+		float4* output = NULL;
 		err = cudaMalloc((void**)&output, sizeBytes);
 		if (err != cudaSuccess) {
 			fprintf(stderr, "Failed to allocate device vector A (error code %s)!\n", cudaGetErrorString(err));
@@ -107,6 +107,75 @@ void TestWithAlloc(const std::vector<float>& input_host, std::vector<float>& out
 	auto end = high_resolution_clock::now();
 	auto elapsed = duration_cast<milliseconds>(end - start).count();
 	std::cout << "Test with alloc " << mIterations << " iterations, time " << elapsed << "ms" << std::endl;
+}
+
+void TestWithAllocZeroCopy(const std::vector<float>& input_host, std::vector<float>& output_host, size_t sizeBytes) {
+
+	cudaError_t err = cudaSuccess;
+
+	// Set flag to enable zero copy access
+	err = cudaSetDeviceFlags(cudaDeviceMapHost);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to set cudaSetDeviceFlags (error code %s)!\n", cudaGetErrorString(err));
+		exit(EXIT_FAILURE);
+	}
+
+	// Host Arrays (CPU pointers)
+	float4* h_in = NULL;
+	float4* h_out = NULL;
+
+	// Allocate host memory using CUDA allocation calls
+	err = cudaHostAlloc((void**)&h_in, sizeBytes, cudaHostAllocMapped);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to allocate device input memory (error code %s)!\n", cudaGetErrorString(err));
+		exit(EXIT_FAILURE);
+	}
+
+	err = cudaHostAlloc((void**)&h_out, sizeBytes, cudaHostAllocMapped);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to allocate device output memory (error code %s)!\n", cudaGetErrorString(err));
+		exit(EXIT_FAILURE);
+	}
+
+	// Copy input bytes, just to operate with prepared data
+	memcpy(h_in, input_host.data(), sizeBytes);
+
+	auto start = high_resolution_clock::now();
+	for (unsigned int i = 1; i <= mIterations; ++i) {
+
+		// Device arrays (CPU pointers)
+		float4* d_out, * d_in;
+		// Get device pointer from host memory. No allocation or memcpy
+		err = cudaHostGetDevicePointer((void**)&d_in, (void*)h_in, 0);
+		if (err != cudaSuccess) {
+			fprintf(stderr, "Failed to cudaHostGetDevicePointer input (error code %s)!\n", cudaGetErrorString(err));
+			exit(EXIT_FAILURE);
+		}
+
+		err = cudaHostGetDevicePointer((void**)&d_out, (void*)h_out, 0);
+		if (err != cudaSuccess) {
+			fprintf(stderr, "Failed to cudaHostGetDevicePointer output (error code %s)!\n", cudaGetErrorString(err));
+			exit(EXIT_FAILURE);
+		}
+		
+		err = cudaWarpIntrinsic(d_in, d_out, mWidth, mHeight, mFocalLength, mPrincipalPoint, mDistortion);
+		if (err != cudaSuccess) {
+			fprintf(stderr, "Failed to cudaWarpIntrinsic (error code %s)!\n", cudaGetErrorString(err));
+			exit(EXIT_FAILURE);
+		}
+
+		memcpy(&output_host[0], h_out, sizeBytes);
+
+		cudaFree(d_in);
+		cudaFree(d_out);
+	}
+
+	auto end = high_resolution_clock::now();
+	auto elapsed = duration_cast<milliseconds>(end - start).count();
+	std::cout << "Test with alloc " << mIterations << " iterations, time " << elapsed << "ms" << std::endl;
+	
+	cudaFree(h_in);
+	cudaFree(h_out);
 }
 
 int main(int argc, char** argv)
@@ -160,7 +229,9 @@ int main(int argc, char** argv)
 
 	auto sizeBytes = size * sizeof(float) * 4;
 
-	TestWithoutAlloc(input_host, output_host, sizeBytes);
+	TestWithAllocZeroCopy(input_host, output_host, sizeBytes);
+
+	//TestWithoutAlloc(input_host, output_host, sizeBytes);
 
 	if (!outFilePath.empty()) {
 		std::vector<uint16_t> output;
@@ -178,7 +249,7 @@ int main(int argc, char** argv)
 		os.close();
 	}
 
-	TestWithAlloc(input_host, output_host, sizeBytes);
+	//TestWithAlloc(input_host, output_host, sizeBytes);
 
 	return 0;
 }
