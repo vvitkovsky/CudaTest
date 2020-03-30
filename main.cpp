@@ -41,7 +41,7 @@ void TestWithoutAlloc(const std::vector<float>& input_host, std::vector<float>& 
 		exit(EXIT_FAILURE);
 	}
 
-	auto start = system_clock::now();
+	auto start = high_resolution_clock::now();
 	for (unsigned int i = 1; i <= mIterations; ++i) {
 		err = cudaWarpIntrinsic(input, output, mWidth, mHeight, mFocalLength, mPrincipalPoint, mDistortion);
 		if (err != cudaSuccess) {
@@ -49,7 +49,7 @@ void TestWithoutAlloc(const std::vector<float>& input_host, std::vector<float>& 
 			exit(EXIT_FAILURE);
 		}
 	}
-	auto end = system_clock::now();
+	auto end = high_resolution_clock::now();
 	auto elapsed = duration_cast<microseconds>(end - start).count();
 	std::cout << "Test without alloc " << mIterations << " iterations, time " << elapsed << "μs" << std::endl;
 
@@ -65,7 +65,7 @@ void TestWithoutAlloc(const std::vector<float>& input_host, std::vector<float>& 
 
 void TestWithAlloc(const std::vector<float>& input_host, std::vector<float>& output_host, size_t sizeBytes) {
 
-	auto start = system_clock::now();
+	auto start = high_resolution_clock::now();
 	for (unsigned int i = 1; i <= mIterations; ++i) {
 		cudaError_t err = cudaSuccess;
 		uchar4* input = NULL;
@@ -104,7 +104,7 @@ void TestWithAlloc(const std::vector<float>& input_host, std::vector<float>& out
 		cudaFree(output);
 	}
 
-	auto end = system_clock::now();
+	auto end = high_resolution_clock::now();
 	auto elapsed = duration_cast<milliseconds>(end - start).count();
 	std::cout << "Test with alloc " << mIterations << " iterations, time " << elapsed << "ms" << std::endl;
 }
