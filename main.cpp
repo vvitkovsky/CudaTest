@@ -14,6 +14,7 @@ float2 mPrincipalPoint = { 0.0f, 0.0f }; //0, 0
 float4 mDistortion = { 0.0f, 0.0f, 0.0f, 0.0f }; // 0, 0, 0, 0
 
 unsigned int mIterations = 1;
+int mDevice = 0;
 
 uint32_t mWidth = 5120;
 uint32_t mHeight = 5120;
@@ -118,16 +119,14 @@ void TestWithAllocZeroCopy(const std::vector<float>& input_host, std::vector<flo
 	cudaError_t err = cudaSuccess;
 
 	cudaDeviceProp deviceProp;
-	int device = 0;
-	err = cudaGetDeviceProperties(&deviceProp, 0);
+	err = cudaGetDeviceProperties(&deviceProp, mDevice);
 	if (err != cudaSuccess) {
-		fprintf(stderr, "Failed to cudaGetDeviceProperties for device %d (error code %s)!\n", device, cudaGetErrorString(err));
+		fprintf(stderr, "Failed to cudaGetDeviceProperties for device %d (error code %s)!\n", mDevice, cudaGetErrorString(err));
 		return;
 	}
 
-	if (!deviceProp.canMapHostMemory)
-	{
-		fprintf(stderr, "Device %d does not support mapping CPU host memory!\n", device);
+	if (!deviceProp.canMapHostMemory) {
+		fprintf(stderr, "Device %d does not support mapping CPU host memory!\n", mDevice);
 		return;
 	}
 
@@ -207,7 +206,7 @@ void TestWithAllocZeroCopy(const std::vector<float>& input_host, std::vector<flo
 int main(int argc, char** argv)
 {	
 	if (argc < 2) {
-		std::cout << "usage: " << "-i <iterations count> -f <file path> -o <output file path> -w <width> -h <height>" << std::endl;
+		std::cout << "usage: " << "-i <iterations count> -f <file path> -o <output file path> -w <width> -h <height> -d <device>" << std::endl;
 	}
 
 	std::string filePath = "frame.bin";
@@ -228,6 +227,9 @@ int main(int argc, char** argv)
 		}
 		else if (strcmp(argv[i], "-h") == 0) {
 			mHeight = std::atoi(argv[i + 1]);
+		}
+		else if (strcmp(argv[i], "-d") == 0) {
+			mDevice = std::atoi(argv[i + 1]);
 		}
 	}
 
