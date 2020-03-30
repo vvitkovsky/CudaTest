@@ -13,7 +13,7 @@ float2 mFocalLength = { 1.0f, 1.0f }; //1, 1
 float2 mPrincipalPoint = { 0.0f, 0.0f }; //0, 0
 float4 mDistortion = { 0.0f, 0.0f, 0.0f, 0.0f }; // 0, 0, 0, 0
 
-unsigned int mIterations = 100;
+unsigned int mIterations = 1;
 
 uint32_t mWidth = 5120;
 uint32_t mHeight = 5120;
@@ -61,6 +61,8 @@ void TestWithoutAlloc(const std::vector<float>& input_host, std::vector<float>& 
 
 	cudaFree(input);
 	cudaFree(output);
+
+	cudaDeviceSynchronize();
 }
 
 void TestWithAlloc(const std::vector<float>& input_host, std::vector<float>& output_host, size_t sizeBytes) {
@@ -107,6 +109,8 @@ void TestWithAlloc(const std::vector<float>& input_host, std::vector<float>& out
 	auto end = high_resolution_clock::now();
 	auto elapsed = duration_cast<milliseconds>(end - start).count();
 	std::cout << "Test with alloc " << mIterations << " iterations, time " << elapsed << "ms" << std::endl;
+
+	cudaDeviceSynchronize();
 }
 
 void TestWithAllocZeroCopy(const std::vector<float>& input_host, std::vector<float>& output_host, size_t sizeBytes) {
@@ -138,13 +142,17 @@ void TestWithAllocZeroCopy(const std::vector<float>& input_host, std::vector<flo
 	}
 
 	// Copy input bytes, just to operate with prepared data
-	memcpy(h_in, input_host.data(), sizeBytes);
+	err = cudaMemcpy(h_in, input_host.data(), sizeBytes, cudaMemcpyHostToHost);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaMemcpy input memory (error code %s)!\n", cudaGetErrorString(err));
+		exit(EXIT_FAILURE);
+	}
 
 	auto start = high_resolution_clock::now();
 	for (unsigned int i = 1; i <= mIterations; ++i) {
 
 		// Device arrays (CPU pointers)
-		float4* d_out, * d_in;
+		float4* d_in = nullptr;
 		// Get device pointer from host memory. No allocation or memcpy
 		err = cudaHostGetDevicePointer((void**)&d_in, (void*)h_in, 0);
 		if (err != cudaSuccess) {
@@ -152,6 +160,7 @@ void TestWithAllocZeroCopy(const std::vector<float>& input_host, std::vector<flo
 			exit(EXIT_FAILURE);
 		}
 
+		float4* d_out = nullptr;
 		err = cudaHostGetDevicePointer((void**)&d_out, (void*)h_out, 0);
 		if (err != cudaSuccess) {
 			fprintf(stderr, "Failed to cudaHostGetDevicePointer output (error code %s)!\n", cudaGetErrorString(err));
@@ -163,19 +172,22 @@ void TestWithAllocZeroCopy(const std::vector<float>& input_host, std::vector<flo
 			fprintf(stderr, "Failed to cudaWarpIntrinsic (error code %s)!\n", cudaGetErrorString(err));
 			exit(EXIT_FAILURE);
 		}
-
-		memcpy(&output_host[0], h_out, sizeBytes);
-
-		cudaFree(d_in);
-		cudaFree(d_out);
 	}
 
 	auto end = high_resolution_clock::now();
-	auto elapsed = duration_cast<milliseconds>(end - start).count();
-	std::cout << "Test with alloc " << mIterations << " iterations, time " << elapsed << "ms" << std::endl;
+	auto elapsed = duration_cast<microseconds>(end - start).count();
+	std::cout << "Test zero copy " << mIterations << " iterations, time " << elapsed << "μs" << std::endl;
 	
-	cudaFree(h_in);
-	cudaFree(h_out);
+	cudaDeviceSynchronize();
+
+	err = cudaMemcpy(&output_host[0], h_out, sizeBytes, cudaMemcpyHostToHost);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaMemcpy input memory (error code %s)!\n", cudaGetErrorString(err));
+		exit(EXIT_FAILURE);
+	}
+
+	cudaFreeHost(h_in);
+	cudaFreeHost(h_out);
 }
 
 int main(int argc, char** argv)
@@ -231,7 +243,7 @@ int main(int argc, char** argv)
 
 	TestWithAllocZeroCopy(input_host, output_host, sizeBytes);
 
-	//TestWithoutAlloc(input_host, output_host, sizeBytes);
+	TestWithoutAlloc(input_host, output_host, sizeBytes);
 
 	if (!outFilePath.empty()) {
 		std::vector<uint16_t> output;
@@ -249,7 +261,7 @@ int main(int argc, char** argv)
 		os.close();
 	}
 
-	//TestWithAlloc(input_host, output_host, sizeBytes);
+	TestWithAlloc(input_host, output_host, sizeBytes);
 
 	return 0;
 }
