@@ -25,20 +25,20 @@ void TestWithoutAlloc(const std::vector<float>& input_host, std::vector<float>& 
 	err = cudaMalloc((void**)&input, sizeBytes);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to allocate device vector A (error code %s)!\n", cudaGetErrorString(err));
-		exit(EXIT_FAILURE);
+		return;
 	}
 
 	err = cudaMemcpy(input, input_host.data(), sizeBytes, cudaMemcpyHostToDevice);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to copy vector A from host to device (error code %s)!\n", cudaGetErrorString(err));
-		exit(EXIT_FAILURE);
+		return;
 	}
 
 	float4* output = NULL;
 	err = cudaMalloc((void**)&output, sizeBytes);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to allocate device vector A (error code %s)!\n", cudaGetErrorString(err));
-		exit(EXIT_FAILURE);
+		return;
 	}
 
 	auto start = high_resolution_clock::now();
@@ -46,7 +46,7 @@ void TestWithoutAlloc(const std::vector<float>& input_host, std::vector<float>& 
 		err = cudaWarpIntrinsic(input, output, mWidth, mHeight, mFocalLength, mPrincipalPoint, mDistortion);
 		if (err != cudaSuccess) {
 			fprintf(stderr, "Failed to cudaWarpIntrinsic (error code %s)!\n", cudaGetErrorString(err));
-			exit(EXIT_FAILURE);
+			return;
 		}
 	}
 	auto end = high_resolution_clock::now();
@@ -56,7 +56,7 @@ void TestWithoutAlloc(const std::vector<float>& input_host, std::vector<float>& 
 	err = cudaMemcpy(output_host.data(), output, sizeBytes, cudaMemcpyDeviceToHost);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to copy vector C from device to host (error code %s)!\n", cudaGetErrorString(err));
-		exit(EXIT_FAILURE);
+		return;
 	}
 
 	cudaFree(input);
@@ -74,32 +74,32 @@ void TestWithAlloc(const std::vector<float>& input_host, std::vector<float>& out
 		err = cudaMalloc((void**)&input, sizeBytes);
 		if (err != cudaSuccess) {
 			fprintf(stderr, "Failed to allocate device vector A (error code %s)!\n", cudaGetErrorString(err));
-			exit(EXIT_FAILURE);
+			return;
 		}
 
-		err = cudaMemcpy(input, &input_host[0], sizeBytes, cudaMemcpyHostToDevice);
+		err = cudaMemcpy(input, input_host.data(), sizeBytes, cudaMemcpyHostToDevice);
 		if (err != cudaSuccess) {
 			fprintf(stderr, "Failed to copy vector A from host to device (error code %s)!\n", cudaGetErrorString(err));
-			exit(EXIT_FAILURE);
+			return;
 		}
 
 		float4* output = NULL;
 		err = cudaMalloc((void**)&output, sizeBytes);
 		if (err != cudaSuccess) {
 			fprintf(stderr, "Failed to allocate device vector A (error code %s)!\n", cudaGetErrorString(err));
-			exit(EXIT_FAILURE);
+			return;
 		}
 
 		err = cudaWarpIntrinsic(input, output, mWidth, mHeight, mFocalLength, mPrincipalPoint, mDistortion);
 		if (err != cudaSuccess) {
 			fprintf(stderr, "Failed to cudaWarpIntrinsic (error code %s)!\n", cudaGetErrorString(err));
-			exit(EXIT_FAILURE);
+			return;
 		}
 
 		err = cudaMemcpy(&output_host[0], output, sizeBytes, cudaMemcpyDeviceToHost);
 		if (err != cudaSuccess) {
 			fprintf(stderr, "Failed to copy vector C from device to host (error code %s)!\n", cudaGetErrorString(err));
-			exit(EXIT_FAILURE);
+			return;
 		}
 
 		cudaFree(input);
@@ -117,11 +117,25 @@ void TestWithAllocZeroCopy(const std::vector<float>& input_host, std::vector<flo
 
 	cudaError_t err = cudaSuccess;
 
+	cudaDeviceProp deviceProp;
+	int device = 0;
+	err = cudaGetDeviceProperties(&deviceProp, 0);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaGetDeviceProperties for device %d (error code %s)!\n", device, cudaGetErrorString(err));
+		return;
+	}
+
+	if (!deviceProp.canMapHostMemory)
+	{
+		fprintf(stderr, "Device %d does not support mapping CPU host memory!\n", device);
+		return;
+	}
+
 	// Set flag to enable zero copy access
 	err = cudaSetDeviceFlags(cudaDeviceMapHost);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to set cudaSetDeviceFlags (error code %s)!\n", cudaGetErrorString(err));
-		exit(EXIT_FAILURE);
+		return;
 	}
 
 	// Host Arrays (CPU pointers)
@@ -132,20 +146,20 @@ void TestWithAllocZeroCopy(const std::vector<float>& input_host, std::vector<flo
 	err = cudaHostAlloc((void**)&h_in, sizeBytes, cudaHostAllocMapped);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to allocate device input memory (error code %s)!\n", cudaGetErrorString(err));
-		exit(EXIT_FAILURE);
+		return;
 	}
 
 	err = cudaHostAlloc((void**)&h_out, sizeBytes, cudaHostAllocMapped);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to allocate device output memory (error code %s)!\n", cudaGetErrorString(err));
-		exit(EXIT_FAILURE);
+		return;
 	}
 
 	// Copy input bytes, just to operate with prepared data
 	err = cudaMemcpy(h_in, input_host.data(), sizeBytes, cudaMemcpyHostToHost);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to cudaMemcpy input memory (error code %s)!\n", cudaGetErrorString(err));
-		exit(EXIT_FAILURE);
+		return;
 	}
 
 	auto start = high_resolution_clock::now();
@@ -157,20 +171,20 @@ void TestWithAllocZeroCopy(const std::vector<float>& input_host, std::vector<flo
 		err = cudaHostGetDevicePointer((void**)&d_in, (void*)h_in, 0);
 		if (err != cudaSuccess) {
 			fprintf(stderr, "Failed to cudaHostGetDevicePointer input (error code %s)!\n", cudaGetErrorString(err));
-			exit(EXIT_FAILURE);
+			return;
 		}
 
 		float4* d_out = nullptr;
 		err = cudaHostGetDevicePointer((void**)&d_out, (void*)h_out, 0);
 		if (err != cudaSuccess) {
 			fprintf(stderr, "Failed to cudaHostGetDevicePointer output (error code %s)!\n", cudaGetErrorString(err));
-			exit(EXIT_FAILURE);
+			return;
 		}
 		
 		err = cudaWarpIntrinsic(d_in, d_out, mWidth, mHeight, mFocalLength, mPrincipalPoint, mDistortion);
 		if (err != cudaSuccess) {
 			fprintf(stderr, "Failed to cudaWarpIntrinsic (error code %s)!\n", cudaGetErrorString(err));
-			exit(EXIT_FAILURE);
+			return;
 		}
 	}
 
@@ -183,7 +197,7 @@ void TestWithAllocZeroCopy(const std::vector<float>& input_host, std::vector<flo
 	err = cudaMemcpy(&output_host[0], h_out, sizeBytes, cudaMemcpyHostToHost);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to cudaMemcpy input memory (error code %s)!\n", cudaGetErrorString(err));
-		exit(EXIT_FAILURE);
+		return;
 	}
 
 	cudaFreeHost(h_in);
