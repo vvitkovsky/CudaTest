@@ -231,27 +231,14 @@ void TestWithAllocZeroCopy(const std::vector<uint16_t>& input_host, std::vector<
 	uint8_t* h_out = NULL;
 
 	auto start = high_resolution_clock::now();
-	std::vector<uint8_t> tmp(sizeBytes, 0);
-	auto end = high_resolution_clock::now();
-	auto elapsed = duration_cast<microseconds>(end - start).count();
-	std::cout << "Test std alloc, time " << elapsed << "μs" << std::endl;
-
-	std::vector<uint8_t> tmp2(sizeBytes, 0);
-	start = high_resolution_clock::now();
-	memcpy(tmp2.data(), tmp.data(), sizeBytes);
-	end = high_resolution_clock::now();
-	elapsed = duration_cast<microseconds>(end - start).count();
-	std::cout << "Test std memcpy, time " << elapsed << "μs" << std::endl;
-
-	start = high_resolution_clock::now();
 	// Allocate host memory using CUDA allocation calls
 	err = cudaHostAlloc((void**)&h_in, sizeBytes, cudaHostAllocMapped);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to allocate device input memory (error code %s)!\n", cudaGetErrorString(err));
 		return;
 	}
-	end = high_resolution_clock::now();
-	elapsed = duration_cast<microseconds>(end - start).count();
+	auto end = high_resolution_clock::now();
+	auto elapsed = duration_cast<microseconds>(end - start).count();
 	std::cout << "Test cudaHostAlloc, time " << elapsed << "μs" << std::endl;
 
 	start = high_resolution_clock::now();
@@ -273,7 +260,6 @@ void TestWithAllocZeroCopy(const std::vector<uint16_t>& input_host, std::vector<
 
 	start = high_resolution_clock::now();
 	for (unsigned int i = 1; i <= mIterations; ++i) {
-
 		// Device arrays (CPU pointers)
 		ushort1* d_in = nullptr;
 		// Get device pointer from host memory. No allocation or memcpy
@@ -296,11 +282,16 @@ void TestWithAllocZeroCopy(const std::vector<uint16_t>& input_host, std::vector<
 			return;
 		}
 	}
+
+	err = cudaDeviceSynchronize();
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaDeviceSynchronize (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
 	end = high_resolution_clock::now();
 	elapsed = duration_cast<microseconds>(end - start).count();
 	std::cout << "Test zero copy " << mIterations << " iterations, time " << elapsed << "μs" << std::endl;
-
-	cudaDeviceSynchronize();
 
 	err = cudaMemcpy(&output_host[0], h_out, sizeBytes, cudaMemcpyHostToHost);
 	if (err != cudaSuccess) {
