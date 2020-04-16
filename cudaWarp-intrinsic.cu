@@ -105,6 +105,26 @@ cudaError_t cudaWarpIntrinsic( float4* input, float4* output, uint32_t width, ui
 	return CUDA(cudaGetLastError());
 }
 
+cudaError_t cudaWarpIntrinsic(ushort1* input, ushort1* output, uint32_t width, uint32_t height,
+	const float2& focalLength, const float2& principalPoint, const float4& distortion)
+{
+	if (!input || !output)
+		return cudaErrorInvalidDevicePointer;
+
+	if (width == 0 || height == 0)
+		return cudaErrorInvalidValue;
+
+	// launch kernel
+	const dim3 blockDim(8, 8);
+	const dim3 gridDim(iDivUp(width, blockDim.x), iDivUp(height, blockDim.y));
+
+	gpuIntrinsicWarp<<<gridDim, blockDim>>>(input, output, width, height,
+		focalLength, principalPoint,
+		distortion.x, distortion.y, distortion.z, distortion.w);
+
+	return CUDA(cudaGetLastError());
+}
+
 
 
 

@@ -6,7 +6,7 @@ cmake_minimum_required (VERSION 3.9)
 project ("CudaTest" LANGUAGES CXX CUDA)
 
 find_package(CUDA REQUIRED)
-include_directories("${CUDA_INCLUDE_DIRS}")
+include_directories(${CUDA_INCLUDE_DIRS})
 
 file(GLOB_RECURSE src *.cpp)
 file(GLOB_RECURSE src_cu *.cu)

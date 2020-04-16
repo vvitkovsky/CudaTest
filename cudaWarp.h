@@ -86,6 +86,14 @@ cudaError_t cudaWarpIntrinsic( float4* input, float4* output, uint32_t width, ui
 											  
 
 /**
+ * Apply in-place instrinsic lens distortion correction to 32-bit floating-point RGBA image.
+ * Pinhole camera model with radial (barrel) distortion and tangential distortion.
+ * @ingroup warping
+ */
+cudaError_t cudaWarpIntrinsic(ushort1* input, ushort1* output, uint32_t width, uint32_t height,
+    const float2& focalLength, const float2& principalPoint, const float4& distortion);
+
+/**
  * Apply fisheye lens dewarping to an 8-bit fixed-point RGBA image.
  * @param[in] focus focus of the lens (in mm).
  * @ingroup warping

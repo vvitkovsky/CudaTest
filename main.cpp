@@ -203,6 +203,96 @@ void TestWithAllocZeroCopy(const std::vector<float>& input_host, std::vector<flo
 	cudaFreeHost(h_out);
 }
 
+void TestWithAllocZeroCopy(const std::vector<uint16_t>& input_host, std::vector<uint16_t>& output_host, size_t sizeBytes) {
+
+	cudaError_t err = cudaSuccess;
+
+	cudaDeviceProp deviceProp;
+	err = cudaGetDeviceProperties(&deviceProp, mDevice);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaGetDeviceProperties for device %d (error code %s)!\n", mDevice, cudaGetErrorString(err));
+		return;
+	}
+
+	if (!deviceProp.canMapHostMemory) {
+		fprintf(stderr, "Device %d does not support mapping CPU host memory!\n", mDevice);
+		return;
+	}
+
+	// Set flag to enable zero copy access
+	err = cudaSetDeviceFlags(cudaDeviceMapHost);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to set cudaSetDeviceFlags (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
+	// Host Arrays (CPU pointers)
+	uint8_t* h_in = NULL;
+	uint8_t* h_out = NULL;
+
+	// Allocate host memory using CUDA allocation calls
+	err = cudaHostAlloc((void**)&h_in, sizeBytes, cudaHostAllocMapped);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to allocate device input memory (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
+	// Copy input bytes, just to operate with prepared data
+	err = cudaMemcpy(h_in, input_host.data(), sizeBytes, cudaMemcpyHostToHost);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaMemcpy input memory (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
+	auto start = high_resolution_clock::now();
+
+	err = cudaHostAlloc((void**)&h_out, sizeBytes, cudaHostAllocMapped);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to allocate device output memory (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
+	for (unsigned int i = 1; i <= mIterations; ++i) {
+
+		// Device arrays (CPU pointers)
+		ushort1* d_in = nullptr;
+		// Get device pointer from host memory. No allocation or memcpy
+		err = cudaHostGetDevicePointer((void**)&d_in, (void*)h_in, 0);
+		if (err != cudaSuccess) {
+			fprintf(stderr, "Failed to cudaHostGetDevicePointer input (error code %s)!\n", cudaGetErrorString(err));
+			return;
+		}
+
+		ushort1* d_out = nullptr;
+		err = cudaHostGetDevicePointer((void**)&d_out, (void*)h_out, 0);
+		if (err != cudaSuccess) {
+			fprintf(stderr, "Failed to cudaHostGetDevicePointer output (error code %s)!\n", cudaGetErrorString(err));
+			return;
+		}
+
+		err = cudaWarpIntrinsic(d_in, d_out, mWidth, mHeight, mFocalLength, mPrincipalPoint, mDistortion);
+		if (err != cudaSuccess) {
+			fprintf(stderr, "Failed to cudaWarpIntrinsic (error code %s)!\n", cudaGetErrorString(err));
+			return;
+		}
+	}
+
+	auto end = high_resolution_clock::now();
+	auto elapsed = duration_cast<microseconds>(end - start).count();
+	std::cout << "Test zero copy " << mIterations << " iterations, time " << elapsed << "μs" << std::endl;
+
+	cudaDeviceSynchronize();
+
+	err = cudaMemcpy(&output_host[0], h_out, sizeBytes, cudaMemcpyHostToHost);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaMemcpy input memory (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
+	cudaFreeHost(h_in);
+	cudaFreeHost(h_out);
+}
+
 int main(int argc, char** argv)
 {	
 	if (argc < 2) {
@@ -210,7 +300,7 @@ int main(int argc, char** argv)
 	}
 
 	std::string filePath = "frame.bin";
-	std::string outFilePath;
+	std::string outFilePath = "out.bin";
 
 	for (int i = 1; i < argc - 1; i++) {
 		if (strcmp(argv[i], "-i") == 0) {
@@ -243,6 +333,7 @@ int main(int argc, char** argv)
 	is.read((char*)input.data(), filesize);
 	is.close();
 
+	/*
 	std::vector<float> input_host(size * 4, 0);
 	std::vector<float> output_host(size * 4, 0);
 
@@ -278,6 +369,18 @@ int main(int argc, char** argv)
 	}
 
 	TestWithAlloc(input_host, output_host, sizeBytes);
+	*/
+
+	std::vector<uint16_t> output_host(size, 0);
+	auto sizeBytes = size * sizeof(uint16_t);
+	TestWithAllocZeroCopy(input, output_host, sizeBytes);
+
+	if (!outFilePath.empty()) {
+		std::ofstream os(outFilePath, std::ios::out | std::ofstream::binary);
+		os.write((char*)output_host.data(), output_host.size() * 2);
+		os.flush();
+		os.close();
+	}
 
 	return 0;
 }
