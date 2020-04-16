@@ -230,21 +230,40 @@ void TestWithAllocZeroCopy(const std::vector<uint16_t>& input_host, std::vector<
 	uint8_t* h_in = NULL;
 	uint8_t* h_out = NULL;
 
+	auto start = high_resolution_clock::now();
+	std::vector<uint8_t> tmp(sizeBytes, 0);
+	auto end = high_resolution_clock::now();
+	auto elapsed = duration_cast<microseconds>(end - start).count();
+	std::cout << "Test std alloc, time " << elapsed << "μs" << std::endl;
+
+	std::vector<uint8_t> tmp2(sizeBytes, 0);
+	start = high_resolution_clock::now();
+	memcpy(tmp2.data(), tmp.data(), sizeBytes);
+	end = high_resolution_clock::now();
+	elapsed = duration_cast<microseconds>(end - start).count();
+	std::cout << "Test std memcpy, time " << elapsed << "μs" << std::endl;
+
+	start = high_resolution_clock::now();
 	// Allocate host memory using CUDA allocation calls
 	err = cudaHostAlloc((void**)&h_in, sizeBytes, cudaHostAllocMapped);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to allocate device input memory (error code %s)!\n", cudaGetErrorString(err));
 		return;
 	}
+	end = high_resolution_clock::now();
+	elapsed = duration_cast<microseconds>(end - start).count();
+	std::cout << "Test cudaHostAlloc, time " << elapsed << "μs" << std::endl;
 
+	start = high_resolution_clock::now();
 	// Copy input bytes, just to operate with prepared data
 	err = cudaMemcpy(h_in, input_host.data(), sizeBytes, cudaMemcpyHostToHost);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to cudaMemcpy input memory (error code %s)!\n", cudaGetErrorString(err));
 		return;
 	}
-
-	auto start = high_resolution_clock::now();
+	end = high_resolution_clock::now();
+	elapsed = duration_cast<microseconds>(end - start).count();
+	std::cout << "Test cudaMemcpy, time " << elapsed << "μs" << std::endl;
 
 	err = cudaHostAlloc((void**)&h_out, sizeBytes, cudaHostAllocMapped);
 	if (err != cudaSuccess) {
@@ -252,6 +271,7 @@ void TestWithAllocZeroCopy(const std::vector<uint16_t>& input_host, std::vector<
 		return;
 	}
 
+	start = high_resolution_clock::now();
 	for (unsigned int i = 1; i <= mIterations; ++i) {
 
 		// Device arrays (CPU pointers)
@@ -276,9 +296,8 @@ void TestWithAllocZeroCopy(const std::vector<uint16_t>& input_host, std::vector<
 			return;
 		}
 	}
-
-	auto end = high_resolution_clock::now();
-	auto elapsed = duration_cast<microseconds>(end - start).count();
+	end = high_resolution_clock::now();
+	elapsed = duration_cast<microseconds>(end - start).count();
 	std::cout << "Test zero copy " << mIterations << " iterations, time " << elapsed << "μs" << std::endl;
 
 	cudaDeviceSynchronize();
