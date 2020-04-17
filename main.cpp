@@ -284,6 +284,7 @@ void TestWithAllocZeroCopy(const std::vector<uint16_t>& input_host, std::vector<
 	}
 
 	err = cudaDeviceSynchronize();
+	//err = cudaStreamSynchronize(0);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to cudaDeviceSynchronize (error code %s)!\n", cudaGetErrorString(err));
 		return;
@@ -293,11 +294,16 @@ void TestWithAllocZeroCopy(const std::vector<uint16_t>& input_host, std::vector<
 	elapsed = duration_cast<microseconds>(end - start).count();
 	std::cout << "Test zero copy " << mIterations << " iterations, time " << elapsed << "μs" << std::endl;
 
+	start = high_resolution_clock::now();
 	err = cudaMemcpy(&output_host[0], h_out, sizeBytes, cudaMemcpyHostToHost);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to cudaMemcpy input memory (error code %s)!\n", cudaGetErrorString(err));
 		return;
 	}
+
+	end = high_resolution_clock::now();
+	elapsed = duration_cast<microseconds>(end - start).count();
+	std::cout << "Test cudaMemcpy, time " << elapsed << "μs" << std::endl;
 
 	cudaFreeHost(h_in);
 	cudaFreeHost(h_out);
