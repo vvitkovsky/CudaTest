@@ -378,7 +378,7 @@ void TestSum(const std::vector<uint16_t>& input_host, std::vector<uint16_t>& out
 	}
 
 	auto start = high_resolution_clock::now();
-	err = cudaWarpSum(d_in, d_in, d_out, sizeBytes / 2);
+	err = cudaWarpSum(d_out, d_in, sizeBytes / 2);
 	if (err != cudaSuccess) {
 		fprintf(stderr, "Failed to cudaWarpIntrinsic (error code %s)!\n", cudaGetErrorString(err));
 		return;
@@ -519,7 +519,7 @@ int main(int argc, char** argv)
 
 	std::vector<uint16_t> output_host(size, 0);
 	auto sizeBytes = size * sizeof(uint16_t);
-	//TestWithAllocZeroCopy(input, output_host, sizeBytes);
+	TestWithAllocZeroCopy(input, output_host, sizeBytes);
 	TestSum(input, output_host, sizeBytes);
 	TestSumStd(input, output_host, sizeBytes);
 
