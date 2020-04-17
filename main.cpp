@@ -222,7 +222,7 @@ void TestWithAllocZeroCopy(const std::vector<uint16_t>& input_host, std::vector<
 	// Set flag to enable zero copy access
 	err = cudaSetDeviceFlags(cudaDeviceMapHost);
 	if (err != cudaSuccess) {
-		fprintf(stderr, "Failed to set cudaSetDeviceFlags (error code %s)!\n", cudaGetErrorString(err));
+		fprintf(stderr, "Failed to set cudaDeviceMapHost (error code %s)!\n", cudaGetErrorString(err));
 		return;
 	}
 
