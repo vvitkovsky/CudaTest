@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BaseThread.h"
+#include <condition_variable>
 
 namespace AVUN 
 {
