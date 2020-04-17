@@ -16,9 +16,9 @@ add_library(cuda_lib STATIC
 )
 
 # Add source to this project's executable.
-add_executable(${PROJECT_NAME} main.cpp)
+add_executable(${PROJECT_NAME} main.cpp SumProcessor.cpp BaseThread.cpp)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE cuda_lib)
+target_link_libraries(${PROJECT_NAME} ${CUDA_LIBRARIES} cuda_lib)
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 	COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/frame.bin" "${CMAKE_CURRENT_BINARY_DIR}/frame.bin"

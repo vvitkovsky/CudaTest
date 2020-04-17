@@ -1,13 +1,19 @@
 ﻿// CudaTest.cpp : Defines the entry point for the application.
 //
+#include "SumProcessor.h"
+
 #include "cudaWarp.h"
+#include "cudaSum.h"
+
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <vector>
 #include <chrono>
+#include <thread>
 
 using namespace std::chrono;
+using namespace AVUN;
 
 float2 mFocalLength = { 1.0f, 1.0f }; //1, 1
 float2 mPrincipalPoint = { 0.0f, 0.0f }; //0, 0
@@ -309,6 +315,130 @@ void TestWithAllocZeroCopy(const std::vector<uint16_t>& input_host, std::vector<
 	cudaFreeHost(h_out);
 }
 
+void TestSum(const std::vector<uint16_t>& input_host, std::vector<uint16_t>& output_host, size_t sizeBytes) {
+	cudaError_t err = cudaSuccess;
+
+	cudaDeviceProp deviceProp;
+	err = cudaGetDeviceProperties(&deviceProp, mDevice);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaGetDeviceProperties for device %d (error code %s)!\n", mDevice, cudaGetErrorString(err));
+		return;
+	}
+
+	if (!deviceProp.canMapHostMemory) {
+		fprintf(stderr, "Device %d does not support mapping CPU host memory!\n", mDevice);
+		return;
+	}
+
+	// Set flag to enable zero copy access
+	err = cudaSetDeviceFlags(cudaDeviceMapHost);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to set cudaDeviceMapHost (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
+	// Host Arrays (CPU pointers)
+	uint8_t* h_in = NULL;
+	uint8_t* h_out = NULL;
+
+	// Allocate host memory using CUDA allocation calls
+	err = cudaHostAlloc((void**)&h_in, sizeBytes, cudaHostAllocMapped);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to allocate device input memory (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
+	// Copy input bytes, just to operate with prepared data
+	err = cudaMemcpy(h_in, input_host.data(), sizeBytes, cudaMemcpyHostToHost);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaMemcpy input memory (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
+	err = cudaHostAlloc((void**)&h_out, sizeBytes, cudaHostAllocMapped);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to allocate device output memory (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
+	// Device arrays (CPU pointers)
+	uint16_t* d_in = nullptr;
+	// Get device pointer from host memory. No allocation or memcpy
+	err = cudaHostGetDevicePointer((void**)&d_in, (void*)h_in, 0);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaHostGetDevicePointer input (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
+	uint16_t* d_out = nullptr;
+	err = cudaHostGetDevicePointer((void**)&d_out, (void*)h_out, 0);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaHostGetDevicePointer output (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
+	auto start = high_resolution_clock::now();
+	err = cudaWarpSum(d_in, d_in, d_out, sizeBytes / 2);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaWarpIntrinsic (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
+	err = cudaDeviceSynchronize();
+	//err = cudaStreamSynchronize(0);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaDeviceSynchronize (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+	auto end = high_resolution_clock::now();
+	auto elapsed = duration_cast<microseconds>(end - start).count();
+	std::cout << "Test cudaWarpSum, time " << elapsed << "μs" << std::endl;
+
+	err = cudaMemcpy(&output_host[0], h_out, sizeBytes, cudaMemcpyHostToHost);
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to cudaMemcpy input memory (error code %s)!\n", cudaGetErrorString(err));
+		return;
+	}
+
+	cudaFreeHost(h_in);
+	cudaFreeHost(h_out);
+}
+
+void TestSumStd(const std::vector<uint16_t>& input_host, std::vector<uint16_t>& output_host, size_t sizeBytes) {
+	
+	output_host.assign(input_host.begin(), input_host.end());
+	
+	std::vector<std::unique_ptr<SumProcessor>> mSumProcessors;
+
+	auto processorCount = std::thread::hardware_concurrency();
+
+	for (int i = 0; i < processorCount; ++i) {
+		mSumProcessors.emplace_back(std::make_unique<SumProcessor>(i));
+	}
+
+	auto start = high_resolution_clock::now();
+
+	auto src = (uint16_t*)input_host.data();
+	auto dst = (uint16_t*)output_host.data();
+
+	auto sumDataSize = sizeBytes / 2;
+	auto blockSize = sumDataSize / processorCount;
+
+	size_t offset = 0;
+	for (auto& processor : mSumProcessors) {
+		processor->Process(src + offset, dst + offset, blockSize);
+		offset += blockSize;
+	}
+
+	for (auto& processor : mSumProcessors) {
+		processor->WaitForComplete();
+	}
+
+	auto end = high_resolution_clock::now();
+	auto elapsed = duration_cast<microseconds>(end - start).count();
+	std::cout << "Test sumStd, time " << elapsed << "μs" << std::endl;
+}
+
 int main(int argc, char** argv)
 {	
 	if (argc < 2) {
@@ -389,7 +519,9 @@ int main(int argc, char** argv)
 
 	std::vector<uint16_t> output_host(size, 0);
 	auto sizeBytes = size * sizeof(uint16_t);
-	TestWithAllocZeroCopy(input, output_host, sizeBytes);
+	//TestWithAllocZeroCopy(input, output_host, sizeBytes);
+	TestSum(input, output_host, sizeBytes);
+	TestSumStd(input, output_host, sizeBytes);
 
 	if (!outFilePath.empty()) {
 		std::ofstream os(outFilePath, std::ios::out | std::ofstream::binary);

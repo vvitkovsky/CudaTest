@@ -108,6 +108,6 @@ cudaError_t cudaWarpFisheye( uchar4* input, uchar4* output, uint32_t width, uint
  */
 cudaError_t cudaWarpFisheye( float4* input, float4* output, uint32_t width, uint32_t height, float focus );
 
-							
+						
 #endif
 
