@@ -11,6 +11,7 @@
 #include <vector>
 #include <chrono>
 #include <thread>
+#include <future>
 
 using namespace std::chrono;
 using namespace AVUN;
@@ -20,6 +21,7 @@ float2 mPrincipalPoint = { 0.0f, 0.0f }; //0, 0
 float4 mDistortion = { 0.0f, 0.0f, 0.0f, 0.0f }; // 0, 0, 0, 0
 
 unsigned int mIterations = 1;
+unsigned int mThreads = 1;
 int mDevice = 0;
 
 uint32_t mWidth = 5120;
@@ -508,6 +510,9 @@ int main(int argc, char** argv)
 		if (strcmp(argv[i], "-i") == 0) {
 			mIterations = std::atoi(argv[i + 1]);
 		}
+		else if (strcmp(argv[i], "-d") == 0) {
+			mDevice = std::atoi(argv[i + 1]);
+		}
 		else if (strcmp(argv[i], "-f") == 0) {
 			filePath = argv[i + 1];
 		}
@@ -520,8 +525,8 @@ int main(int argc, char** argv)
 		else if (strcmp(argv[i], "-h") == 0) {
 			mHeight = std::atoi(argv[i + 1]);
 		}
-		else if (strcmp(argv[i], "-d") == 0) {
-			mDevice = std::atoi(argv[i + 1]);
+		else if (strcmp(argv[i], "-t") == 0) {
+			mThreads = std::atoi(argv[i + 1]);
 		}
 	}
 
@@ -581,18 +586,30 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
-	TestWithAllocZeroCopy(input, output_host, sizeBytes);
-	TestSum(input, output_host, sizeBytes);
-	TestSumStd(input, output_host, sizeBytes);
-	
-	TestSumAndDist(input, output_host, sizeBytes);
+	std::vector<std::future<void>> threads;
 
+	for (auto i = 0; i < mThreads; ++i) {
+		auto f = std::async(std::launch::async, [&] {
+			TestWithAllocZeroCopy(input, output_host, sizeBytes);
+			TestSum(input, output_host, sizeBytes);
+			//TestSumStd(input, output_host, sizeBytes);
+
+			TestSumAndDist(input, output_host, sizeBytes);
+		});
+		threads.emplace_back(std::move(f));
+	}
+
+	for (auto& x : threads) {
+		x.get();
+	}
+
+	/*
 	if (!outFilePath.empty()) {
 		std::ofstream os(outFilePath, std::ios::out | std::ofstream::binary);
 		os.write((char*)output_host.data(), output_host.size() * 2);
 		os.flush();
 		os.close();
 	}
-
+	*/
 	return 0;
 }
