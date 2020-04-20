@@ -273,7 +273,7 @@ void TestWithAllocZeroCopy(const std::vector<uint16_t>& input_host, std::vector<
 
 	auto end = high_resolution_clock::now();
 	auto elapsed = duration_cast<milliseconds>(end - start).count();
-	std::cout << "Test distorsion " << mIterations << " iterations, time " << elapsed << "ms" << std::endl;
+	std::cout << "Test distortion GPU, time " << elapsed << "ms" << std::endl;
 
 	err = cudaMemcpy(&output_host[0], h_out, sizeBytes, cudaMemcpyHostToHost);
 	if (err != cudaSuccess) {
@@ -329,7 +329,7 @@ void TestSum(const std::vector<uint16_t>& input_host, std::vector<uint16_t>& out
 	}
 
 	auto start = high_resolution_clock::now();
-	for (int i = 0; i < mIterations; i++) {
+	for (auto i = 0; i < mIterations; i++) {
 		err = cudaWarpSum(d_out, d_in, sizeBytes / 2);
 		if (err != cudaSuccess) {
 			fprintf(stderr, "Failed to cudaWarpIntrinsic (error code %s)!\n", cudaGetErrorString(err));
@@ -346,7 +346,7 @@ void TestSum(const std::vector<uint16_t>& input_host, std::vector<uint16_t>& out
 
 	auto end = high_resolution_clock::now();
 	auto elapsed = duration_cast<milliseconds>(end - start).count();
-	std::cout << "Test cudaWarpSum, time " << elapsed << "ms" << std::endl;
+	std::cout << "Test sum GPU, time " << elapsed << "ms" << std::endl;
 
 	err = cudaMemcpy(&output_host[0], h_out, sizeBytes, cudaMemcpyHostToHost);
 	if (err != cudaSuccess) {
@@ -366,31 +366,33 @@ void TestSumStd(const std::vector<uint16_t>& input_host, std::vector<uint16_t>& 
 
 	auto processorCount = std::thread::hardware_concurrency();
 
-	for (int i = 0; i < processorCount; ++i) {
+	for (auto i = 0; i < processorCount; ++i) {
 		mSumProcessors.emplace_back(std::make_unique<SumProcessor>(i));
 	}
 
 	auto start = high_resolution_clock::now();
 
-	auto src = (uint16_t*)input_host.data();
-	auto dst = (uint16_t*)output_host.data();
+	for (auto i = 0; i < mIterations; i++) {
+		auto src = (uint16_t*)input_host.data();
+		auto dst = (uint16_t*)output_host.data();
 
-	auto sumDataSize = sizeBytes / 2;
-	auto blockSize = sumDataSize / processorCount;
+		auto sumDataSize = sizeBytes / 2;
+		auto blockSize = sumDataSize / processorCount;
 
-	size_t offset = 0;
-	for (auto& processor : mSumProcessors) {
-		processor->Process(src + offset, dst + offset, blockSize);
-		offset += blockSize;
-	}
+		size_t offset = 0;
+		for (auto& processor : mSumProcessors) {
+			processor->Process(src + offset, dst + offset, blockSize);
+			offset += blockSize;
+		}
 
-	for (auto& processor : mSumProcessors) {
-		processor->WaitForComplete();
+		for (auto& processor : mSumProcessors) {
+			processor->WaitForComplete();
+		}
 	}
 
 	auto end = high_resolution_clock::now();
 	auto elapsed = duration_cast<milliseconds>(end - start).count();
-	std::cout << "Test sumStd, time " << elapsed << "ms" << std::endl;
+	std::cout << "Test sum CPU, time " << elapsed << "ms" << std::endl;
 }
 
 void TestSumAndDist(const std::vector<uint16_t>& input_host, std::vector<uint16_t>& output_host, size_t sizeBytes) {
@@ -429,7 +431,7 @@ void TestSumAndDist(const std::vector<uint16_t>& input_host, std::vector<uint16_
 	}
 
 	auto start = high_resolution_clock::now();
-	for (int i = 0; i < mIterations; i++) {
+	for (auto i = 0; i < mIterations; i++) {
 		{
 			// Device arrays (CPU pointers)
 			ushort1* d_in = nullptr;
@@ -486,7 +488,11 @@ void TestSumAndDist(const std::vector<uint16_t>& input_host, std::vector<uint16_
 
 	auto end = high_resolution_clock::now();
 	auto elapsed = duration_cast<milliseconds>(end - start).count();
-	std::cout << "Test cudaHostAlloc, time " << elapsed << "ms" << std::endl;
+	std::cout << "Test sum and distortion GPU, time " << elapsed << "ms" << std::endl;
+
+	cudaFreeHost(h_in);
+	cudaFreeHost(h_out);
+	cudaFreeHost(h_sum_out);
 }
 
 int main(int argc, char** argv)
